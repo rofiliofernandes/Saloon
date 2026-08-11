@@ -1,0 +1,3 @@
+import {createClient} from "@/lib/supabase/server";
+export async function requireUser(){const s=await createClient();const {data:{user}}=await s.auth.getUser();if(!user)throw new Error("UNAUTHENTICATED");return {s,user}}
+export async function requireAdmin(){const {s,user}=await requireUser();const {data:p}=await s.from("profiles").select("role").eq("id",user.id).single();if(p?.role!=="admin")throw new Error("FORBIDDEN");return {s,user}}
