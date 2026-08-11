@@ -27,25 +27,45 @@ export default function Book() {
   const [message, setMessage] = useState("");
   const [loadingSlots, setLoadingSlots] = useState(false);
 
+
+
   useEffect(() => {
-    const supabase = createClient();
+  const supabase = createClient();
 
-    supabase
-      .from("services")
-      .select("id,name,price,duration_minutes,category")
-      .eq("active", true)
-      .then(({ data }) => {
-        setServices(data ?? []);
-      });
+  supabase
+    .from("services")
+    .select("id,name,price,duration_minutes,category")
+    .eq("active", true)
+    .then(({ data }) => {
+      setServices(data ?? []);
+    });
+}, []);
 
-    supabase
-      .from("stylists")
-      .select("id,name,category")
-      .eq("active", true)
-      .then(({ data }) => {
-        setStylists(data ?? []);
-      });
-  }, []);
+useEffect(() => {
+  setStylists([]);
+  setStylist("");
+  setSlots([]);
+
+  if (!service) {
+    return;
+  }
+
+  const supabase = createClient();
+
+  supabase
+    .from("stylist_services")
+    .select("stylist_id, stylists(id,name,category)")
+    .eq("service_id", service)
+    .then(({ data }) => {
+      const availableStylists = (data ?? [])
+        .map((row: any) => row.stylists)
+        .filter(Boolean);
+
+      setStylists(availableStylists);
+    });
+}, [service]);
+
+
 
   useEffect(() => {
     setSlots([]);

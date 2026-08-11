@@ -57,6 +57,7 @@ export function AdminEditor({ section }: { section: string }) {
   const [form, setForm] = useState<any>({});
   const [services, setServices] = useState<any[]>([]);
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  const [stylistRows, setStylistRows] = useState<any[]>([]); 
 
   async function load() {
     const r = await fetch("/api/admin/" + section);
@@ -64,13 +65,19 @@ export function AdminEditor({ section }: { section: string }) {
     setRows(x.rows || []);
   }
 
-  async function loadServices() {
-    if (section !== "stylists") return;
-
+async function loadServices() {
+  if (section === "stylists") {
     const r = await fetch("/api/admin/services");
     const x = await r.json();
     setServices(x.rows || []);
   }
+
+  if (section === "availability") {
+    const r = await fetch("/api/admin/stylists");
+    const x = await r.json();
+    setStylistRows(x.rows || []);
+  }
+}
 
   useEffect(() => {
     load();
@@ -105,6 +112,29 @@ export function AdminEditor({ section }: { section: string }) {
 
   async function save(e: any) {
     e.preventDefault();
+
+if (section === "availability" && form.day_off) {
+  if (editingId) {
+    const r = await fetch(
+      `/api/admin/availability/${editingId}`,
+      {
+        method: "DELETE",
+      }
+    );
+
+    if (!r.ok) {
+      const x = await r.json();
+      alert(x.error || "Unable to set day off");
+      return;
+    }
+  }
+
+  setForm({});
+  setEditingId(null);
+  setOpen(false);
+  load();
+  return;
+}
 
     const payload =
       section === "stylists"
@@ -236,42 +266,131 @@ export function AdminEditor({ section }: { section: string }) {
             </div>
 
             <div className="mt-6 grid gap-3">
-              {c.fields.map((f: any[]) =>
-                f[0] === "description" ||
-                f[0] === "bio" ? (
-                  <textarea
-                    key={f[0]}
-                    placeholder={f[1]}
-                    value={form[f[0]] ?? ""}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        [f[0]]: e.target.value,
-                      })
-                    }
-                    className="min-h-24 rounded-xl border p-3"
-                  />
-                ) : (
-                  <input
-                    key={f[0]}
-                    placeholder={f[1]}
-                    value={form[f[0]] ?? ""}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        [f[0]]: e.target.value,
-                      })
-                    }
-                    className="rounded-xl border p-3"
-                    required={
-                      ![
-                        "usage_limit",
-                        "expires_at",
-                      ].includes(f[0])
-                    }
-                  />
-                )
-              )}
+            {section === "availability" ? (
+  <>
+    <select
+      value={form.stylist_id ?? ""}
+      onChange={(e) =>
+        setForm({ ...form, stylist_id: e.target.value })
+      }
+      className="rounded-xl border p-3"
+      required
+    >
+      <option value="">Choose stylist</option>
+
+      {stylistRows.map((stylist) => (
+        <option key={stylist.id} value={stylist.id}>
+          {stylist.name}
+        </option>
+      ))}
+    </select>
+
+    <select
+      value={form.day_of_week ?? ""}
+      onChange={(e) =>
+        setForm({
+          ...form,
+          day_of_week: e.target.value,
+        })
+      }
+      className="rounded-xl border p-3"
+      required
+    >
+      <option value="">Choose day</option>
+      <option value="0">Sunday</option>
+      <option value="1">Monday</option>
+      <option value="2">Tuesday</option>
+      <option value="3">Wednesday</option>
+      <option value="4">Thursday</option>
+      <option value="5">Friday</option>
+      <option value="6">Saturday</option>
+    </select>
+
+    <label className="flex items-center gap-3 rounded-xl border p-3">
+      <input
+        type="checkbox"
+        checked={form.day_off === true}
+        onChange={(e) =>
+          setForm({
+            ...form,
+            day_off: e.target.checked,
+          })
+        }
+      />
+
+      <span>Day off</span>
+    </label>
+
+    {!form.day_off && (
+      <>
+        <label className="text-sm">
+          Start time
+          <input
+            type="time"
+            value={form.start_time ?? ""}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                start_time: e.target.value,
+              })
+            }
+            className="mt-2 w-full rounded-xl border p-3"
+            required
+          />
+        </label>
+
+        <label className="text-sm">
+          End time
+          <input
+            type="time"
+            value={form.end_time ?? ""}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                end_time: e.target.value,
+              })
+            }
+            className="mt-2 w-full rounded-xl border p-3"
+            required
+          />
+        </label>
+      </>
+    )}
+  </>
+) : (
+  c.fields.map((f: any[]) =>
+    f[0] === "description" || f[0] === "bio" ? (
+      <textarea
+        key={f[0]}
+        placeholder={f[1]}
+        value={form[f[0]] ?? ""}
+        onChange={(e) =>
+          setForm({
+            ...form,
+            [f[0]]: e.target.value,
+          })
+        }
+        className="min-h-24 rounded-xl border p-3"
+      />
+    ) : (
+      <input
+        key={f[0]}
+        placeholder={f[1]}
+        value={form[f[0]] ?? ""}
+        onChange={(e) =>
+          setForm({
+            ...form,
+            [f[0]]: e.target.value,
+          })
+        }
+        className="rounded-xl border p-3"
+        required={
+          !["usage_limit", "expires_at"].includes(f[0])
+        }
+      />
+    )
+  )
+)}
 
               {section === "stylists" && (
                 <div className="rounded-2xl border p-4">
