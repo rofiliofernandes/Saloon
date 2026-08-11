@@ -37,20 +37,212 @@ create policy "coupons admin" on public.coupons for all using(public.is_admin())
 create policy "coupon usage admin" on public.coupon_usage for all using(public.is_admin()) with check(public.is_admin());
 create policy "audit admin" on public.audit_logs for select using(public.is_admin());
 
-create or replace function public.create_appointment(p_customer_id uuid,p_service_id uuid,p_stylist_id uuid,p_start_time timestamptz,p_coupon_code text default null) returns public.appointments language plpgsql security definer set search_path=public as $$
-declare s public.services; st public.stylists; e timestamptz; price numeric(10,2); c public.coupons; r public.appointments;
+
+create or replace function public.create_appointment(
+  p_customer_id uuid,
+  p_service_id uuid,
+  p_stylist_id uuid,
+  p_start_time timestamptz,
+  p_coupon_code text default null
+)
+returns public.appointments
+language plpgsql
+security definer
+set search_path=public
+as $$
+declare
+  s public.services;
+  st public.stylists;
+  c public.coupons;
+  r public.appointments;
+
+  e timestamptz;
+
+  base_price numeric(10,2);
+  final_price numeric(10,2);
+  discount_amount numeric(10,2) := 0;
+  applied_coupon_code text := null;
 begin
-if auth.uid()<>p_customer_id then raise exception 'Not authorized';end if;
-select * into s from services where id=p_service_id and active and deleted_at is null;if not found then raise exception 'Service unavailable';end if;
-select * into st from stylists where id=p_stylist_id and active and deleted_at is null;if not found then raise exception 'Stylist unavailable';end if;
-if not exists(select 1 from stylist_services where stylist_id=p_stylist_id and service_id=p_service_id) then raise exception 'Stylist does not provide this service';end if;
-e:=p_start_time+make_interval(mins=>s.duration_minutes);if p_start_time<=now() then raise exception 'Appointment must be in the future';end if;
-if exists(select 1 from blocked_periods where (stylist_id=p_stylist_id or stylist_id is null) and tstzrange(start_time,end_time,'[)') && tstzrange(p_start_time,e,'[)')) then raise exception 'That period is blocked';end if;
-price:=s.price;
-if p_coupon_code is not null and trim(p_coupon_code)<>'' then select * into c from coupons where upper(code)=upper(trim(p_coupon_code)) and active and (expires_at is null or expires_at>now()) for update;if not found then raise exception 'Invalid coupon';end if;if price<c.minimum_amount then raise exception 'Minimum booking amount not met';end if;if c.usage_limit is not null and c.used_count>=c.usage_limit then raise exception 'Coupon limit reached';end if;if c.discount_type='percentage' then price:=greatest(0,price-round(price*c.discount_value/100,2));else price:=greatest(0,price-c.discount_value);end if;end if;
-insert into appointments(customer_id,stylist_id,service_id,start_time,end_time,price,coupon_id) values(p_customer_id,p_stylist_id,p_service_id,p_start_time,e,price,c.id) returning * into r;
-if c.id is not null then update coupons set used_count=used_count+1 where id=c.id;insert into coupon_usage(coupon_id,customer_id,appointment_id) values(c.id,p_customer_id,r.id);end if;
-return r;
-exception when exclusion_violation then raise exception 'That slot was just booked. Please choose another time.';
-end;$$;
-revoke all on function public.create_appointment(uuid,uuid,uuid,timestamptz,text) from public;grant execute on function public.create_appointment(uuid,uuid,uuid,timestamptz,text) to authenticated;
+
+  if auth.uid() <> p_customer_id then
+    raise exception 'Not authorized';
+  end if;
+
+  select *
+  into s
+  from services
+  where id = p_service_id
+    and active
+    and deleted_at is null;
+
+  if not found then
+    raise exception 'Service unavailable';
+  end if;
+
+  select *
+  into st
+  from stylists
+  where id = p_stylist_id
+    and active
+    and deleted_at is null;
+
+  if not found then
+    raise exception 'Stylist unavailable';
+  end if;
+
+  if not exists (
+    select 1
+    from stylist_services
+    where stylist_id = p_stylist_id
+      and service_id = p_service_id
+  ) then
+    raise exception 'Stylist does not provide this service';
+  end if;
+
+  e := p_start_time + make_interval(mins => s.duration_minutes);
+
+  if p_start_time <= now() then
+    raise exception 'Appointment must be in the future';
+  end if;
+
+  if exists (
+    select 1
+    from blocked_periods
+    where (stylist_id = p_stylist_id or stylist_id is null)
+      and tstzrange(start_time, end_time, '[)')
+          && tstzrange(p_start_time, e, '[)')
+  ) then
+    raise exception 'That period is blocked';
+  end if;
+
+  base_price := s.price;
+  final_price := base_price;
+
+  /*
+   * Apply coupon, if supplied.
+   */
+  if p_coupon_code is not null
+     and trim(p_coupon_code) <> '' then
+
+    select *
+    into c
+    from coupons
+    where upper(code) = upper(trim(p_coupon_code))
+      and active
+      and (expires_at is null or expires_at > now())
+    for update;
+
+    if not found then
+      raise exception 'Invalid coupon';
+    end if;
+
+    if base_price < c.minimum_amount then
+      raise exception 'Minimum booking amount not met';
+    end if;
+
+    if c.usage_limit is not null
+       and c.used_count >= c.usage_limit then
+      raise exception 'Coupon limit reached';
+    end if;
+
+    applied_coupon_code := c.code;
+
+    if c.discount_type = 'percentage' then
+
+      discount_amount :=
+        round(base_price * c.discount_value / 100, 2);
+
+    else
+
+      discount_amount :=
+        c.discount_value;
+
+    end if;
+
+    discount_amount :=
+      least(discount_amount, base_price);
+
+    final_price :=
+      greatest(0, base_price - discount_amount);
+
+  end if;
+
+  /*
+   * Save the complete pricing history.
+   */
+  insert into appointments (
+    customer_id,
+    stylist_id,
+    service_id,
+    start_time,
+    end_time,
+    base_price,
+    discount_amount,
+    price,
+    coupon_id,
+    coupon_code,
+    booking_source
+  )
+  values (
+    p_customer_id,
+    p_stylist_id,
+    p_service_id,
+    p_start_time,
+    e,
+    base_price,
+    discount_amount,
+    final_price,
+    case when c.id is not null then c.id else null end,
+    applied_coupon_code,
+    'online'
+  )
+  returning *
+  into r;
+
+  /*
+   * Record coupon usage.
+   */
+  if c.id is not null then
+
+    update coupons
+    set used_count = used_count + 1
+    where id = c.id;
+
+    insert into coupon_usage (
+      coupon_id,
+      customer_id,
+      appointment_id
+    )
+    values (
+      c.id,
+      p_customer_id,
+      r.id
+    );
+
+  end if;
+
+  return r;
+
+exception
+
+  when exclusion_violation then
+    raise exception 'That slot was just booked. Please choose another time.';
+
+end;
+$$;
+
+revoke all on function public.create_appointment(
+  uuid,
+  uuid,
+  uuid,
+  timestamptz,
+  text
+) from public;
+
+grant execute on function public.create_appointment(
+  uuid,
+  uuid,
+  uuid,
+  timestamptz,
+  text
+) to authenticated;

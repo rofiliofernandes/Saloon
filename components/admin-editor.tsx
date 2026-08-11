@@ -297,16 +297,26 @@ export function AdminEditor({ section }: { section: string }) {
             }
           );
 
-          if (!relationResponse.ok) {
-            const relationError = await relationResponse.json();
+        
+	if (!relationResponse.ok) {
+  let relationMessage =
+    "Stylist saved, but services could not be updated.";
 
-            alert(
-              relationError.error ||
-                "Stylist saved, but services could not be updated."
-            );
-            return;
-          }
-        }
+  try {
+    const relationError = await relationResponse.json();
+
+    if (relationError?.error) {
+      relationMessage = relationError.error;
+    }
+  } catch {
+    // Server returned a non-JSON response.
+  }
+
+  alert(relationMessage);
+  return;
+}
+	
+	}
       }
 
       setOpen(false);
