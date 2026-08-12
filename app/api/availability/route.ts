@@ -31,7 +31,7 @@ export async function GET(req: Request) {
   } = v.data;
 
   /*
-   * First make absolutely sure this stylist provides
+   * Make absolutely sure this stylist provides
    * the selected service.
    */
   const { data: relationship } = await s
@@ -44,10 +44,13 @@ export async function GET(req: Request) {
   if (!relationship) {
     return NextResponse.json({
       slots: [],
-      error:
-        "This stylist does not provide this service.",
+      error: "This stylist does not provide this service.",
     });
   }
+
+  const dayOfWeek = new Date(
+    `${date}T12:00:00+05:30`
+  ).getDay();
 
   const [
     { data: service },
@@ -66,12 +69,9 @@ export async function GET(req: Request) {
 
     s
       .from("working_hours")
-      .select("*")
+      .select("start_time,end_time")
       .eq("stylist_id", stylist_id)
-      .eq(
-        "day_of_week",
-        new Date(`${date}T12:00:00`).getDay()
-      )
+      .eq("day_of_week", dayOfWeek)
       .maybeSingle(),
 
     s
@@ -102,26 +102,26 @@ export async function GET(req: Request) {
       ),
   ]);
 
-  if (!service || closure) {
+  /*
+   * No service = no availability.
+   *
+   * Salon closure = no availability.
+   *
+   * IMPORTANT:
+   * No working_hours row now means the stylist
+   * is NOT working that day.
+   *
+   * We deliberately do NOT fall back to generic
+   * 10 AM - 10 PM hours.
+   */
+  if (!service || !hours || closure) {
     return NextResponse.json({
       slots: [],
     });
   }
 
-  /*
-   * Default salon hours:
-   *
-   * Monday → Sunday
-   * 10:00 AM → 10:00 PM
-   *
-   * If a working_hours row exists for this stylist/day,
-   * use that instead.
-   */
-  const startTime = hours?.start_time ?? "10:00:00";
-  const endTime =
-    hours?.end_time ??
-    closure?.close_time ??
-    "22:00:00";
+  const startTime = hours.start_time;
+  const endTime = hours.end_time;
 
   const dur = service.duration_minutes;
 
@@ -141,8 +141,8 @@ export async function GET(req: Request) {
   );
 
   /*
-   * Convert blocked periods into timestamps and check
-   * actual overlap rather than relying on startsWith(date).
+   * Convert the requested calendar date into
+   * India-local timestamps.
    */
   const dayStart = new Date(
     `${date}T00:00:00+05:30`
@@ -152,6 +152,10 @@ export async function GET(req: Request) {
     `${date}T23:59:59+05:30`
   ).getTime();
 
+  /*
+   * Only blocked periods that overlap this date
+   * matter.
+   */
   const blocked = (blocks ?? [])
     .map((b: any) => [
       new Date(b.start_time).getTime(),
@@ -165,16 +169,16 @@ export async function GET(req: Request) {
   const slots: string[] = [];
 
   /*
-   * Slots every 30 minutes.
+   * Generate slots every 30 minutes.
    *
    * Example:
    * 10:00
    * 10:30
    * 11:00
    * ...
-   * 21:30
    *
-   * A service must finish by closing time.
+   * A service must finish by the stylist's
+   * configured closing time.
    */
   for (
     let m = startMin;

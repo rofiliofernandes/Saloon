@@ -60,7 +60,6 @@ export function AdminEditor({ section }: { section: string }) {
   const [form, setForm] = useState<any>({});
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState("");
   const [affectedAppointments, setAffectedAppointments] = useState<any[]>([]);
   const [resolvingAppointmentId, setResolvingAppointmentId] = useState<string | null>(null);
   const [resolutionOpen, setResolutionOpen] = useState(false);
@@ -268,16 +267,14 @@ if (section === "stylists") {
         if (form.day_off) {
           if (editingId) {
             const response = await fetch(
-             `/api/admin/${section}/${editingId}`,
+              `/api/admin/availability/${editingId}`,
               { method: "DELETE" }
             );
 
             if (!response.ok) {
               const result = await response.json().catch(() => ({}));
-setFormError(
-  result.error ||
-    "Unable to set this day off. Please resolve any affected appointments first."
-);              return;
+              alert(result.error || "Unable to set day off.");
+              return;
             }
           }
 
@@ -385,14 +382,14 @@ if (section === "blocked-periods") {
     return;
   }
 
- if (!response.ok) {
-  setFormError(
-    result.error ||
-      "Unable to create time off."
-  );
+  if (!response.ok) {
+    alert(
+      result.error ||
+        "Unable to create time off."
+    );
 
-  return;
-}
+    return;
+  }
 
   setOpen(false);
   resetForm();
@@ -507,10 +504,10 @@ if (section === "blocked-periods") {
 
       const x = await r.json();
 
-     if (!r.ok) {
-  setFormError(x.error || "Unable to save.");
-  return;
-}
+      if (!r.ok) {
+        alert(x.error || "Unable to save.");
+        return;
+      }
 
       /*
        * Save stylist/service relationships separately.
@@ -1394,16 +1391,6 @@ if (section === "blocked-periods") {
               </div>
             )}
 
-        {formError && (
-          <div
-            role="alert"
-            className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
-          >
-            <p className="font-medium">Unable to save</p>
-            <p className="mt-1">{formError}</p>
-          </div>
-        )}
-        
             <button
               disabled={saving}
               className="mt-6 w-full rounded-xl bg-neutral-900 p-3 text-white disabled:opacity-50"
