@@ -26,6 +26,25 @@ function getIndiaWeekday(value: Date) {
   return map[weekday || "Sun"];
 }
 
+function indiaMinutes(value: Date) {
+  const parts = new Intl.DateTimeFormat("en-IN", {
+    timeZone: TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(value);
+
+  const hour = Number(
+    parts.find((part) => part.type === "hour")?.value || 0
+  );
+
+  const minute = Number(
+    parts.find((part) => part.type === "minute")?.value || 0
+  );
+
+  return hour * 60 + minute;
+}
+
 function timeToMinutes(value: string) {
   const [hours, minutes] = value
     .slice(0, 5)
@@ -41,14 +60,17 @@ export async function GET(req: Request) {
 
     const url = new URL(req.url);
 
-    const serviceId =
-      String(url.searchParams.get("service_id") || "").trim();
+    const serviceId = String(
+      url.searchParams.get("service_id") || ""
+    ).trim();
 
-    const date =
-      String(url.searchParams.get("date") || "").trim();
+    const date = String(
+      url.searchParams.get("date") || ""
+    ).trim();
 
-    const time =
-      String(url.searchParams.get("time") || "").trim();
+    const time = String(
+      url.searchParams.get("time") || ""
+    ).trim();
 
     if (!serviceId || !date || !time) {
       return NextResponse.json(
@@ -99,8 +121,6 @@ export async function GET(req: Request) {
      * --------------------------------------------------
      * REQUESTED TIME
      * --------------------------------------------------
-     *
-     * The salon operates in Asia/Kolkata.
      */
 
     const start = new Date(
@@ -116,6 +136,9 @@ export async function GET(req: Request) {
       );
     }
 
+    /*
+     * Don't offer a time that has already passed.
+     */
     if (start.getTime() < Date.now()) {
       return NextResponse.json({
         rows: [],
@@ -130,6 +153,13 @@ export async function GET(req: Request) {
     );
 
     const weekday = getIndiaWeekday(start);
+
+    /*
+     * IMPORTANT:
+     * These are explicitly India-local minutes.
+     */
+    const startMinutes = indiaMinutes(start);
+    const endMinutes = indiaMinutes(end);
 
     /*
      * --------------------------------------------------
@@ -232,20 +262,18 @@ export async function GET(req: Request) {
      * --------------------------------------------------
      */
 
-   const {
-  data: allBlockedPeriods,
-  error: allBlockedError,
-} = await s
-  .from("blocked_periods")
-  .select(
-    "stylist_id,start_time,end_time"
-  );
+    const {
+      data: allBlockedPeriods,
+      error: allBlockedError,
+    } = await s
+      .from("blocked_periods")
+      .select(
+        "stylist_id,start_time,end_time"
+      );
 
-if (allBlockedError) {
-  throw allBlockedError;
-}
-
-
+    if (allBlockedError) {
+      throw allBlockedError;
+    }
 
     /*
      * --------------------------------------------------
@@ -262,8 +290,14 @@ if (allBlockedError) {
         "stylist_id,start_time,end_time"
       )
       .eq("status", "confirmed")
-      .lt("start_time", end.toISOString())
-      .gt("end_time", start.toISOString());
+      .lt(
+        "start_time",
+        end.toISOString()
+      )
+      .gt(
+        "end_time",
+        start.toISOString()
+      );
 
     if (appointmentError) {
       throw appointmentError;
@@ -275,117 +309,117 @@ if (allBlockedError) {
      * --------------------------------------------------
      */
 
-    const available = (stylists ?? []).filter(
-      (stylist: any) => {
-        /*
-         * Must provide the selected service.
-         */
-        if (
-          !compatibleStylistIds.has(stylist.id)
-        ) {
-          return false;
-        }
+    const available = (
+      stylists ?? []
+    ).filter((stylist: any) => {
+      /*
+       * Must provide the selected service.
+       */
+      if (
+        !compatibleStylistIds.has(
+          stylist.id
+        )
+      ) {
+        return false;
+      }
 
-        /*
-         * Must have working hours for this day.
-         */
-        const hours = (workingHours ?? []).find(
-          (row: any) =>
-            row.stylist_id === stylist.id
+      /*
+       * Must actually be working
+       * on this day.
+       */
+      const hours = (
+        workingHours ?? []
+      ).find(
+        (row: any) =>
+          row.stylist_id === stylist.id
+      );
+
+      if (!hours) {
+        return false;
+      }
+
+      /*
+       * Appointment must fit completely
+       * inside working hours.
+       */
+      const openingMinutes =
+        timeToMinutes(
+          hours.start_time
         );
 
-        if (!hours) {
-          return false;
-        }
+      const closingMinutes =
+        timeToMinutes(
+          hours.end_time
+        );
 
-        /*
-         * Appointment must fit completely
-         * inside working hours.
-         */
-
-        const startMinutes =
-          start.getHours() * 60 +
-          start.getMinutes();
-
-        const endMinutes =
-          end.getHours() * 60 +
-          end.getMinutes();
-
-        const openingMinutes =
-          timeToMinutes(hours.start_time);
-
-        const closingMinutes =
-          timeToMinutes(hours.end_time);
-
-        if (
-          startMinutes < openingMinutes ||
-          endMinutes > closingMinutes
-        ) {
-          return false;
-        }
-
-        /*
-         * Existing confirmed appointment.
-         */
-
-        const appointmentConflict =
-          (appointments ?? []).some(
-            (appointment: any) =>
-              appointment.stylist_id ===
-                stylist.id &&
-              new Date(
-                appointment.start_time
-              ).getTime() <
-                end.getTime() &&
-              new Date(
-                appointment.end_time
-              ).getTime() >
-                start.getTime()
-          );
-
-        if (appointmentConflict) {
-          return false;
-        }
-
-        /*
-         * Blocked period.
-         *
-         * A null stylist_id means the entire
-         * salon is blocked.
-         */
-
-        const blockedConflict =
-          (allBlockedPeriods ?? []).some(
-            (block: any) => {
-              const applies =
-                block.stylist_id === null ||
-                block.stylist_id ===
-                  stylist.id;
-
-              if (!applies) {
-                return false;
-              }
-
-              return (
-                new Date(
-                  block.start_time
-                ).getTime() <
-                  end.getTime() &&
-                new Date(
-                  block.end_time
-                ).getTime() >
-                  start.getTime()
-              );
-            }
-          );
-
-        if (blockedConflict) {
-          return false;
-        }
-
-        return true;
+      if (
+        startMinutes <
+          openingMinutes ||
+        endMinutes >
+          closingMinutes
+      ) {
+        return false;
       }
-    );
+
+      /*
+       * Existing confirmed appointment.
+       */
+      const appointmentConflict = (
+        appointments ?? []
+      ).some(
+        (appointment: any) =>
+          appointment.stylist_id ===
+            stylist.id &&
+          new Date(
+            appointment.start_time
+          ).getTime() <
+            end.getTime() &&
+          new Date(
+            appointment.end_time
+          ).getTime() >
+            start.getTime()
+      );
+
+      if (appointmentConflict) {
+        return false;
+      }
+
+      /*
+       * Blocked period.
+       *
+       * null stylist_id means
+       * the whole salon is blocked.
+       */
+      const blockedConflict = (
+        allBlockedPeriods ?? []
+      ).some((block: any) => {
+        const applies =
+          block.stylist_id === null ||
+          block.stylist_id ===
+            stylist.id;
+
+        if (!applies) {
+          return false;
+        }
+
+        return (
+          new Date(
+            block.start_time
+          ).getTime() <
+            end.getTime() &&
+          new Date(
+            block.end_time
+          ).getTime() >
+            start.getTime()
+        );
+      });
+
+      if (blockedConflict) {
+        return false;
+      }
+
+      return true;
+    });
 
     return NextResponse.json({
       rows: available,

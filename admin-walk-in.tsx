@@ -13,6 +13,7 @@ type Row = {
   name: string;
   price?: number;
   duration_minutes?: number;
+  category?: string;
 };
 
 export default function AdminWalkIn() {
@@ -21,6 +22,7 @@ export default function AdminWalkIn() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [services, setServices] = useState<Row[]>([]);
   const [stylists, setStylists] = useState<Row[]>([]);
+  const [availableStylists, setAvailableStylists] = useState<Row[]>([]);
 
   const [customerId, setCustomerId] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
@@ -42,6 +44,12 @@ export default function AdminWalkIn() {
 
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
+  const [checkingAvailability, setCheckingAvailability] =
+    useState(false);
+
+  const [availabilityMessage, setAvailabilityMessage] =
+    useState("");
+
   const [error, setError] = useState("");
 
   async function loadData() {
@@ -61,8 +69,10 @@ export default function AdminWalkIn() {
 
       const customersData =
         await customersResponse.json();
+
       const servicesData =
         await servicesResponse.json();
+
       const stylistsData =
         await stylistsResponse.json();
 
@@ -100,37 +110,37 @@ export default function AdminWalkIn() {
     }
   }
 
+  function getIndiaDateTime() {
+    const now = new Date();
+
+    const dateFormatter =
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kolkata",
+      });
+
+    const timeFormatter =
+      new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Kolkata",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+      });
+
+    return {
+      date: dateFormatter.format(now),
+      time: timeFormatter.format(now),
+    };
+  }
+
   useEffect(() => {
-    if (open) {
-      loadData();
+    if (!open) return;
 
-      /*
-       * Walk-ins default to the current
-       * India-local date and time.
-       */
-      const now = new Date();
+    loadData();
 
-      const dateFormatter =
-        new Intl.DateTimeFormat("en-CA", {
-          timeZone: "Asia/Kolkata",
-        });
+    const current = getIndiaDateTime();
 
-      const timeFormatter =
-        new Intl.DateTimeFormat("en-GB", {
-          timeZone: "Asia/Kolkata",
-          hour: "2-digit",
-          minute: "2-digit",
-          hourCycle: "h23",
-        });
-
-      setDate(
-        dateFormatter.format(now)
-      );
-
-      setTime(
-        timeFormatter.format(now)
-      );
-    }
+    setDate(current.date);
+    setTime(current.time);
   }, [open]);
 
   const filteredCustomers = useMemo(() => {
@@ -201,6 +211,7 @@ export default function AdminWalkIn() {
     value: string
   ) {
     setServiceId(value);
+    setStylistId("");
 
     const service = services.find(
       (item) => item.id === value
@@ -212,8 +223,83 @@ export default function AdminWalkIn() {
           Number(service.price || 0)
         )
       );
+    } else {
+      setPrice("");
+    }
+
+    setAvailableStylists([]);
+    setAvailabilityMessage("");
+  }
+
+  async function checkAvailability() {
+    setAvailableStylists([]);
+    setStylistId("");
+    setAvailabilityMessage("");
+    setError("");
+
+    if (!serviceId || !date || !time) {
+      return;
+    }
+
+    setCheckingAvailability(true);
+
+    try {
+      const params = new URLSearchParams({
+        service_id: serviceId,
+        date,
+        time,
+      });
+
+      const response = await fetch(
+        `/api/admin/available-stylists?${params.toString()}`
+      );
+
+      const result =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.error ||
+            "Unable to check stylist availability."
+        );
+      }
+
+      const rows = result.rows || [];
+
+      setAvailableStylists(rows);
+
+      if (!rows.length) {
+        setAvailabilityMessage(
+          "No stylist is available for this service at this time."
+        );
+      }
+    } catch (e: any) {
+      setAvailabilityMessage("");
+      setError(
+        e?.message ||
+          "Unable to check stylist availability."
+      );
+    } finally {
+      setCheckingAvailability(false);
     }
   }
+
+  useEffect(() => {
+    if (!open) return;
+
+    if (!serviceId || !date || !time) {
+      setAvailableStylists([]);
+      setStylistId("");
+      setAvailabilityMessage("");
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      checkAvailability();
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [serviceId, date, time, open]);
 
   function resetForm() {
     setCustomerId("");
@@ -227,10 +313,16 @@ export default function AdminWalkIn() {
 
     setServiceId("");
     setStylistId("");
+    setAvailableStylists([]);
+
     setDate("");
     setTime("");
     setPrice("");
+
     setStatus("completed");
+
+    setCheckingAvailability(false);
+    setAvailabilityMessage("");
     setError("");
   }
 
@@ -263,7 +355,7 @@ export default function AdminWalkIn() {
 
     if (!stylistId) {
       setError(
-        "Please select a stylist."
+        "Please select an available stylist."
       );
       return;
     }
@@ -290,9 +382,6 @@ export default function AdminWalkIn() {
     setLoading(true);
 
     try {
-      /*
-       * Salon operates in India.
-       */
       const startTime = new Date(
         `${date}T${time}:00+05:30`
       );
@@ -444,7 +533,9 @@ export default function AdminWalkIn() {
                             setCustomerSearch(
                               event.target.value
                             );
+
                             setCustomerId("");
+
                             setShowCustomerResults(
                               true
                             );
@@ -525,6 +616,7 @@ export default function AdminWalkIn() {
                     </>
                   ) : (
                     <div className="mt-2 rounded-2xl border bg-neutral-50 p-4">
+
                       <div className="mb-4 flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium">
@@ -538,7 +630,9 @@ export default function AdminWalkIn() {
 
                         <button
                           type="button"
-                          onClick={resetCustomer}
+                          onClick={
+                            resetCustomer
+                          }
                           className="text-xs text-neutral-500 hover:text-neutral-900"
                         >
                           Use existing
@@ -546,6 +640,7 @@ export default function AdminWalkIn() {
                       </div>
 
                       <div className="space-y-3">
+
                         <div>
                           <label className="text-xs font-medium text-neutral-600">
                             Name
@@ -585,6 +680,7 @@ export default function AdminWalkIn() {
                             className="mt-1 w-full rounded-xl border bg-white px-3 py-3 text-sm"
                           />
                         </div>
+
                       </div>
                     </div>
                   )}
@@ -624,40 +720,10 @@ export default function AdminWalkIn() {
                   </select>
                 </div>
 
-                {/* STYLIST */}
-
-                <div>
-                  <label className="text-sm font-medium">
-                    Stylist
-                  </label>
-
-                  <select
-                    value={stylistId}
-                    onChange={(event) =>
-                      setStylistId(
-                        event.target.value
-                      )
-                    }
-                    className="mt-2 w-full rounded-xl border px-3 py-3 text-sm"
-                  >
-                    <option value="">
-                      Select stylist
-                    </option>
-
-                    {stylists.map((stylist) => (
-                      <option
-                        key={stylist.id}
-                        value={stylist.id}
-                      >
-                        {stylist.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
                 {/* DATE / TIME */}
 
                 <div className="grid gap-4 sm:grid-cols-2">
+
                   <div>
                     <label className="text-sm font-medium">
                       Date
@@ -691,11 +757,85 @@ export default function AdminWalkIn() {
                       className="mt-2 w-full rounded-xl border px-3 py-3 text-sm"
                     />
                   </div>
+
+                </div>
+
+                {/* STYLIST */}
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium">
+                      Available stylist
+                    </label>
+
+                    {checkingAvailability && (
+                      <span className="text-xs text-neutral-400">
+                        Checking availability...
+                      </span>
+                    )}
+                  </div>
+
+                  <select
+                    value={stylistId}
+                    disabled={
+                      checkingAvailability ||
+                      !serviceId ||
+                      !date ||
+                      !time ||
+                      availableStylists.length === 0
+                    }
+                    onChange={(event) =>
+                      setStylistId(
+                        event.target.value
+                      )
+                    }
+                    className="mt-2 w-full rounded-xl border px-3 py-3 text-sm disabled:bg-neutral-50 disabled:text-neutral-400"
+                  >
+                    <option value="">
+                      {checkingAvailability
+                        ? "Checking availability..."
+                        : !serviceId
+                        ? "Select a service first"
+                        : "Select available stylist"}
+                    </option>
+
+                    {availableStylists.map(
+                      (stylist) => (
+                        <option
+                          key={stylist.id}
+                          value={stylist.id}
+                        >
+                          {stylist.name}
+                          {stylist.category
+                            ? ` · ${stylist.category}`
+                            : ""}
+                        </option>
+                      )
+                    )}
+                  </select>
+
+                  {!checkingAvailability &&
+                    serviceId &&
+                    date &&
+                    time &&
+                    availabilityMessage && (
+                      <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                        {availabilityMessage}
+                      </p>
+                    )}
+
+                  {!checkingAvailability &&
+                    availableStylists.length > 0 && (
+                      <p className="mt-2 text-xs text-neutral-400">
+                        Showing only stylists who can perform this service and are free for the selected time.
+                      </p>
+                    )}
                 </div>
 
                 {/* PRICE / STATUS */}
 
                 <div className="grid gap-4 sm:grid-cols-2">
+
                   <div>
                     <label className="text-sm font-medium">
                       Amount
@@ -750,6 +890,7 @@ export default function AdminWalkIn() {
                       </option>
                     </select>
                   </div>
+
                 </div>
 
                 {error && (
@@ -759,6 +900,7 @@ export default function AdminWalkIn() {
                 )}
 
                 <div className="flex justify-end gap-3 pt-2">
+
                   <button
                     type="button"
                     disabled={loading}
@@ -773,7 +915,11 @@ export default function AdminWalkIn() {
 
                   <button
                     type="button"
-                    disabled={loading}
+                    disabled={
+                      loading ||
+                      checkingAvailability ||
+                      !stylistId
+                    }
                     onClick={createWalkIn}
                     className="rounded-full bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
                   >
@@ -781,6 +927,7 @@ export default function AdminWalkIn() {
                       ? "Saving..."
                       : "Save walk-in"}
                   </button>
+
                 </div>
 
               </div>

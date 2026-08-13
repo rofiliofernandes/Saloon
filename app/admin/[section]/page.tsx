@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/auth";
 import { AdminEditor } from "@/components/admin-editor";
+import { AdminServiceCatalogue } from "@/components/admin-service-catalogue";
 import AdminAvailability from "@/components/admin-availability";
 
 export default async function Section({
@@ -37,7 +38,10 @@ export default async function Section({
         {section}
       </h1>
 
-      <AdminEditor section={section} />
-    </main>
+{section === "services" ? (
+  <AdminServiceCatalogue />
+) : (
+  <AdminEditor section={section} />
+)}    </main>
   );
 }

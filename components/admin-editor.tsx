@@ -490,7 +490,7 @@ if (section === "blocked-periods") {
           return;
         }
       }
-
+setFormError("");
       const url = editingId
         ? `/api/admin/${section}/${editingId}`
         : `/api/admin/${section}`;
@@ -1292,53 +1292,110 @@ if (section === "blocked-periods") {
               /* NORMAL FORMS */
               /* -------------------------------------------------- */
 
-              <div className="mt-6 grid gap-3">
-                {c.fields?.map((f: any[]) => {
-                  const field = f[0];
-                  const label = f[1];
+             <div className="mt-6 grid gap-3">
+  {c.fields?.map((f: any[]) => {
+    const field = f[0];
+    const label = f[1];
 
-                  if (
-                    field === "description" ||
-                    field === "bio"
-                  ) {
-                    return (
-                      <textarea
-                        key={field}
-                        placeholder={label}
-                        value={form[field] ?? ""}
-                        onChange={(e) =>
-                          setForm({
-                            ...form,
-                            [field]: e.target.value,
-                          })
-                        }
-                        className="min-h-24 rounded-xl border p-3"
-                      />
-                    );
-                  }
+    /*
+     * CATEGORY
+     *
+     * Keep this as a controlled dropdown so only
+     * the database-supported values can be selected.
+     */
+    if (field === "category") {
+      return (
+        <div key={field}>
+          <label className="text-sm font-medium">
+            Category
+          </label>
 
-                  return (
-                    <input
-                      key={field}
-                      type={
-                        field === "price" ||
-                        field === "duration_minutes"
-                          ? "number"
-                          : "text"
-                      }
-                      placeholder={label}
-                      value={form[field] ?? ""}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          [field]: e.target.value,
-                        })
-                      }
-                      className="rounded-xl border p-3"
-                      required
-                    />
-                  );
-                })}
+          <select
+            value={form[field] ?? ""}
+            onChange={(e) => {
+              setFormError("");
+
+              setForm({
+                ...form,
+                [field]: e.target.value,
+              });
+            }}
+            className="mt-2 w-full rounded-xl border p-3"
+            required
+          >
+            <option value="">
+              Select category
+            </option>
+
+            <option value="male">
+              Male
+            </option>
+
+            <option value="female">
+              Female
+            </option>
+
+            <option value="unisex">
+              Unisex
+            </option>
+          </select>
+        </div>
+      );
+    }
+
+    /*
+     * DESCRIPTION / BIO
+     */
+    if (
+      field === "description" ||
+      field === "bio"
+    ) {
+      return (
+        <textarea
+          key={field}
+          placeholder={label}
+          value={form[field] ?? ""}
+          onChange={(e) => {
+            setFormError("");
+
+            setForm({
+              ...form,
+              [field]: e.target.value,
+            });
+          }}
+          className="min-h-24 rounded-xl border p-3"
+        />
+      );
+    }
+
+    /*
+     * NORMAL INPUTS
+     */
+    return (
+      <input
+        key={field}
+        type={
+          field === "price" ||
+          field === "duration_minutes"
+            ? "number"
+            : "text"
+        }
+        placeholder={label}
+        value={form[field] ?? ""}
+        onChange={(e) => {
+          setFormError("");
+
+          setForm({
+            ...form,
+            [field]: e.target.value,
+          });
+        }}
+        className="rounded-xl border p-3"
+        required
+      />
+    );
+  })}
+
 
                 {/* STYLIST SERVICES */}
                 {section === "stylists" && (
