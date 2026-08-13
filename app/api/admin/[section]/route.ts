@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth";
+import {
+  requireAdmin,
+  requireOwner,
+} from "@/lib/auth";
 
 const allowed: any = {
   services: "services",
@@ -10,6 +13,9 @@ const allowed: any = {
   appointments: "appointments",
   customers: "profiles",
 };
+function ownerOnly(section: string) {
+  return section === "coupons";
+}
 
 const SALON_TIME_ZONE = "Asia/Kolkata";
 
@@ -82,8 +88,15 @@ export async function GET(
   { params }: { params: Promise<{ section: string }> }
 ) {
   try {
-    const { s } = await requireAdmin();
-    const { section } = await params;
+   const { s, profile } = await requireAdmin();
+const { section } = await params;
+
+if (ownerOnly(section) && profile?.role !== "owner") {
+  return NextResponse.json(
+    { error: "FORBIDDEN" },
+    { status: 403 }
+  );
+}
 
     const table = allowed[section];
 
@@ -131,8 +144,15 @@ export async function POST(
   { params }: { params: Promise<{ section: string }> }
 ) {
   try {
-    const { s, user } = await requireAdmin();
-    const { section } = await params;
+  const { s, user, profile } = await requireAdmin();
+const { section } = await params;
+
+if (ownerOnly(section) && profile?.role !== "owner") {
+  return NextResponse.json(
+    { error: "FORBIDDEN" },
+    { status: 403 }
+  );
+}
 
     const table = allowed[section];
 

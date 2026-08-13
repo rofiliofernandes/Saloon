@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth";
+import {
+  requireAdmin,
+  requireOwner,
+} from "@/lib/auth";
 
 const allowed: any = {
   services: "services",
@@ -8,6 +11,10 @@ const allowed: any = {
   availability: "working_hours",
   "blocked-periods": "blocked_periods",
 };
+
+function ownerOnly(section: string) {
+  return section === "coupons";
+}
 
 function indiaWeekday(value: string | Date): number {
   const weekday = new Intl.DateTimeFormat("en-US", {
@@ -188,9 +195,16 @@ export async function PATCH(
   }
 ) {
   try {
-    const { s, user } = await requireAdmin();
+   const { s, user, profile } = await requireAdmin();
 
-    const { section, id } = await params;
+const { section, id } = await params;
+
+if (ownerOnly(section) && profile?.role !== "owner") {
+  return NextResponse.json(
+    { error: "FORBIDDEN" },
+    { status: 403 }
+  );
+}
 
     const table = allowed[section];
 
