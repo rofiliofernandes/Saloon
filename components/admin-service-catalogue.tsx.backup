@@ -87,9 +87,19 @@ export function AdminServiceCatalogue() {
   const [saving, setSaving] = useState(false);
 
   const [error, setError] = useState("");
-  const [editingService, setEditingService] = useState<Service | null>(null);
-  const [deletingService, setDeletingService] = useState<Service | null>(null);
-  const [deleting, setDeleting] = useState(false);
+  const [serviceInfo, setServiceInfo] = useState<Service | null>(null);
+const [deleteTarget, setDeleteTarget] = useState<{
+  type: "service" | "category";
+  id: string;
+  name: string;
+} | null>(null);
+const [deleting, setDeleting] = useState(false);
+
+    const [editingService, setEditingService] =
+    useState<Service | null>(null);
+
+  const [deletingService, setDeletingService] =
+    useState<Service | null>(null);
 
   const [categoryModal, setCategoryModal] =
     useState(false);
@@ -196,7 +206,6 @@ export function AdminServiceCatalogue() {
   }
 
   function openServiceForm() {
-    setEditingService(null);
     resetServiceForm();
     setServiceModal(true);
   }
@@ -288,32 +297,6 @@ export function AdminServiceCatalogue() {
       setSaving(false);
     }
   }
-function openEditService(service: Service) {
-  setError("");
-  setEditingService(service);
-  setServiceName(service.name);
-  setServiceDescription(service.description || "");
-  setServiceCategory(service.category_id || "");
-  setAudiences(
-    (service.service_audiences || []).map(
-      (item) => item.audience
-    )
-  );
-  setOptions(
-    (service.service_options || []).map((option) => ({
-      ...option,
-      price: String(option.price),
-      duration_minutes: String(option.duration_minutes),
-    }))
-  );
-  setServiceModal(true);
-}
-
-function closeServiceModal() {
-  setServiceModal(false);
-  setEditingService(null);
-}
-
 async function saveService(
   e: React.FormEvent
 ) {
@@ -419,12 +402,11 @@ async function saveService(
     const response = await fetch(
       "/api/admin/service-catalogue",
       {
-        method: editingService ? "PATCH" : "POST",
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          ...(editingService ? { id: editingService.id } : {}),
           category_id: serviceCategory,
           name: serviceName,
           description: serviceDescription,
@@ -443,7 +425,7 @@ async function saveService(
       );
     }
 
-    closeServiceModal();
+    setServiceModal(false);
 
     await load();
   } catch (e: any) {
@@ -824,7 +806,7 @@ async function saveService(
                                 <button
                                   type="button"
                                   className="rounded-full border border-black/10 px-4 py-2 text-sm transition hover:bg-neutral-50"
-                                 onClick={() => openEditService(service)}
+                                 onClick={() => setEditingService(service)}
                                 >
                                   <Pencil
                                     size={15}
@@ -837,9 +819,50 @@ async function saveService(
                                   type="button"
                                   className="rounded-full border border-red-200 px-4 py-2 text-sm text-red-600 transition hover:bg-red-50"
                                   
-                                  onClick={() => {
+                                  onClick={async () => {
+                                    const confirmed =
+                                      window.confirm(
+                                        `Archive "${service.name}"?\n\nIt will disappear from the active service catalogue, but existing appointments will remain safe.`
+                                      );
+
+                                    if (!confirmed) {
+                                      return;
+                                    }
+
                                     setError("");
-                                    setDeletingService(service);
+
+                                    try {
+
+                                      const response =
+                                        await fetch(
+                                          `/api/admin/service-catalogue?id=${service.id}`,
+                                          {
+                                            method:
+                                              "DELETE",
+                                          }
+                                        );
+
+                                      const data =
+                                        await response.json();
+
+                                      if (
+                                        !response.ok
+                                      ) {
+                                        throw new Error(
+                                          data.error ||
+                                            "Unable to delete service."
+                                        );
+                                      }
+
+                                      await load();
+                                    } catch (
+                                      e: any
+                                    ) {
+                                      setError(
+                                        e?.message ||
+                                          "Unable to delete service."
+                                      );
+                                    }
                                   }}
                                 >
                                   <Trash2
@@ -883,85 +906,6 @@ async function saveService(
           })
         )}
       </div>
-
-
-      {/* SERVICE DELETE MODAL */}
-
-      {deletingService && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-5">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-red-600">
-                  Remove service
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold">
-                  Delete {deletingService.name}?
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setDeletingService(null)}
-                className="rounded-full p-2 transition hover:bg-neutral-100"
-                aria-label="Close"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <p className="mt-4 text-sm leading-6 text-neutral-500">
-              This removes the service from the active catalogue. Existing appointments remain safe.
-            </p>
-
-            <div className="mt-6 flex gap-3">
-              <button
-                type="button"
-                onClick={() => setDeletingService(null)}
-                disabled={deleting}
-                className="flex-1 rounded-xl border border-black/10 px-4 py-3 text-sm font-medium transition hover:bg-neutral-50 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={deleting}
-                onClick={async () => {
-                  setDeleting(true);
-                  setError("");
-
-                  try {
-                    const response = await fetch(
-                      `/api/admin/service-catalogue?id=${deletingService.id}`,
-                      { method: "DELETE" }
-                    );
-
-                    const data = await response.json();
-
-                    if (!response.ok) {
-                      throw new Error(
-                        data.error || "Unable to delete service."
-                      );
-                    }
-
-                    setDeletingService(null);
-                    await load();
-                  } catch (e: any) {
-                    setError(
-                      e?.message || "Unable to delete service."
-                    );
-                    setDeletingService(null);
-                  } finally {
-                    setDeleting(false);
-                  }
-                }}
-                className="flex-1 rounded-xl bg-red-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-red-700 disabled:opacity-50"
-              >
-                {deleting ? "Removing..." : "Delete service"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* CATEGORY MODAL */}
 
@@ -1036,13 +980,15 @@ async function saveService(
                 </p>
 
                 <h2 className="mt-1 text-2xl font-semibold">
-                  {editingService ? "Edit service" : "Add service"}
+                  Add service
                 </h2>
               </div>
 
               <button
                 type="button"
-                onClick={closeServiceModal}
+                onClick={() =>
+                  setServiceModal(false)
+                }
               >
                 <X size={20} />
               </button>
@@ -1287,9 +1233,7 @@ async function saveService(
             >
               {saving
                 ? "Saving..."
-                : editingService
-                  ? "Save changes"
-                  : "Save service"}
+                : "Save service"}
             </button>
           </form>
         </div>

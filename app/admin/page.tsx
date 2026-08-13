@@ -59,24 +59,44 @@ export default async function Admin() {
       .limit(8),
   ]);
 
-  const stats: [number, string, LucideIcon][] = [
+      const stats: [number, string, LucideIcon][] = [
     [today ?? 0, "Appointments today", CalendarCheck],
     [customers ?? 0, "Customers", Users],
-[services ?? 0, "Active services", Scissors],
+    [services ?? 0, "Active services", Scissors],
     [stylists ?? 0, "Active stylists", Users],
   ];
+
+  const currentDate = new Date();
+
+  const dayName = currentDate.toLocaleDateString("en-IN", {
+    weekday: "long",
+  });
+
+  const hour = currentDate.getHours();
+
+  const greeting =
+    hour >= 5 && hour < 12
+      ? "Good morning."
+      : hour >= 12 && hour < 17
+        ? "Good afternoon."
+        : hour >= 17 && hour < 21
+          ? "Good evening."
+          : "Good night.";
 
   return (
     <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[.25em] text-neutral-400">
-            Tuesday · Dashboard
-          </p>
 
-          <h1 className="mt-2 text-4xl font-semibold tracking-tight">
-            Good morning.
-          </h1>
+
+
+         <p className="text-xs font-semibold uppercase tracking-[.25em] text-neutral-400">
+  {dayName} · Dashboard
+</p>
+
+<h1 className="mt-2 text-4xl font-semibold tracking-tight">
+  {greeting}
+</h1>
 
           <p className="mt-2 text-neutral-500">
             Here’s what is happening at your salon.

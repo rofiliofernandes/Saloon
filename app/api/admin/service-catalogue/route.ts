@@ -220,20 +220,32 @@ export async function POST(req: Request) {
       );
     }
 
-    const {
-      data: service,
-      error: serviceError,
-    } = await s
-      .from("services")
-      .insert({
-        name,
-        description,
-        category_id: categoryId,
-        category: "unisex",
-        active: true,
-      })
-      .select()
-      .single();
+  const firstOption = cleanedOptions[0];
+
+const {
+  data: service,
+  error: serviceError,
+} = await s
+  .from("services")
+  .insert({
+    name,
+    description,
+    category_id: categoryId,
+
+    // Keep the legacy service fields populated
+    // because the existing appointments system
+    // still depends on them.
+    price: firstOption.price,
+    duration_minutes: firstOption.duration_minutes,
+
+    // Audience is now stored properly in
+    // service_audiences.
+    category: "unisex",
+
+    active: true,
+  })
+  .select()
+  .single();
 
     if (serviceError || !service) {
       throw (
@@ -251,7 +263,7 @@ export async function POST(req: Request) {
 
     const {
       error: audienceError,
-    } = await s
+      } = await s
       .from("service_audiences")
       .insert(audienceRows);
 
@@ -395,11 +407,11 @@ export async function PATCH(req: Request) {
 
     const cleanedOptions = options.map(
       (option: any, index: number) => {
-        const optionName =
-          String(option.name || "").trim();
+       const optionName =
+  String(option.name || "").trim() ||
+  "Standard";
 
-        const price = Number(option.price);
-
+const price = Number(option.price);
         const duration = Number(
           option.duration_minutes
         );
@@ -409,11 +421,63 @@ export async function PATCH(req: Request) {
             option.price_type || "fixed"
           ).trim();
 
-        if (!optionName) {
-          throw new Error(
-            `Pricing option ${index + 1} needs a name.`
-          );
-        }
+       const cleanedOptions = options.map(
+  (option: any, index: number) => {
+    const optionName =
+      String(option.name || "").trim() ||
+      "Standard";
+
+    const price = Number(option.price);
+
+    const duration = Number(
+      option.duration_minutes
+    );
+
+    const priceType =
+      String(
+        option.price_type || "fixed"
+      ).trim();
+
+    if (
+      !Number.isFinite(price) ||
+      price < 0
+    ) {
+      throw new Error(
+        `Invalid price for pricing option ${index + 1}.`
+      );
+    }
+
+    if (
+      !Number.isInteger(duration) ||
+      duration <= 0
+    ) {
+      throw new Error(
+        `Invalid duration for pricing option ${index + 1}.`
+      );
+    }
+
+    if (
+      ![
+        "fixed",
+        "from",
+        "percentage",
+      ].includes(priceType)
+    ) {
+      throw new Error(
+        `Invalid price type for pricing option ${index + 1}.`
+      );
+    }
+
+    return {
+      name: optionName,
+      price,
+      price_type: priceType,
+      duration_minutes: duration,
+      display_order: index,
+      active: true,
+    };
+  }
+);
 
         if (
           !Number.isFinite(price) ||

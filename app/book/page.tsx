@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 function formatTime(time: string) {
@@ -17,6 +18,8 @@ function getToday() {
 }
 
 export default function Book() {
+  const searchParams = useSearchParams();
+
   const [services, setServices] = useState<any[]>([]);
   const [stylists, setStylists] = useState<any[]>([]);
   const [service, setService] = useState("");
@@ -27,46 +30,94 @@ export default function Book() {
   const [message, setMessage] = useState("");
   const [loadingSlots, setLoadingSlots] = useState(false);
 
-
-
+  /*
+   * Load services from the new service catalogue.
+   */
   useEffect(() => {
-  const supabase = createClient();
+    const supabase = createClient();
 
-  supabase
-    .from("services")
-    .select("id,name,price,duration_minutes,category")
-    .eq("active", true)
-    .then(({ data }) => {
-      setServices(data ?? []);
-    });
-}, []);
+    supabase
+      .from("services")
+      .select(`
+        id,
+        name,
+        active,
+        deleted_at,
+        service_categories (
+          id,
+          name,
+          display_order
+        ),
+        service_options (
+          id,
+          name,
+          price,
+          price_type,
+          duration_minutes,
+          display_order,
+          active
+        )
+      `)
+      .eq("active", true)
+      .is("deleted_at", null)
+      .then(({ data }) => {
+        setServices(data ?? []);
+      });
+  }, []);
 
-useEffect(() => {
-  setStylists([]);
-  setStylist("");
-  setSlots([]);
+  /*
+   * If the customer arrived from the Services page
+   * with ?service_id=..., automatically select it.
+   */
+  useEffect(() => {
+    const serviceId =
+      searchParams.get("service_id");
 
-  if (!service) {
-    return;
-  }
+    if (!serviceId || !services.length) {
+      return;
+    }
 
-  const supabase = createClient();
+    const exists = services.some(
+      (item) => item.id === serviceId
+    );
 
-  supabase
-    .from("stylist_services")
-    .select("stylist_id, stylists(id,name,category)")
-    .eq("service_id", service)
-    .then(({ data }) => {
-      const availableStylists = (data ?? [])
-        .map((row: any) => row.stylists)
-        .filter(Boolean);
+    if (exists) {
+      setService(serviceId);
+    }
+  }, [searchParams, services]);
 
-      setStylists(availableStylists);
-    });
-}, [service]);
+  /*
+   * Load stylists who provide the selected service.
+   */
+  useEffect(() => {
+    setStylists([]);
+    setStylist("");
+    setSlots([]);
 
+    if (!service) {
+      return;
+    }
 
+    const supabase = createClient();
 
+    supabase
+      .from("stylist_services")
+      .select(
+        "stylist_id, stylists(id,name,category)"
+      )
+      .eq("service_id", service)
+      .then(({ data }) => {
+        const availableStylists = (data ?? [])
+          .map((row: any) => row.stylists)
+          .filter(Boolean);
+
+        setStylists(availableStylists);
+      });
+  }, [service]);
+
+  /*
+   * Load available appointment times.
+   */
   useEffect(() => {
     setSlots([]);
 
@@ -97,7 +148,9 @@ useEffect(() => {
       } catch {
         if (!cancelled) {
           setSlots([]);
-          setMessage("Unable to load available times.");
+          setMessage(
+            "Unable to load available times."
+          );
         }
       } finally {
         if (!cancelled) {
@@ -114,19 +167,19 @@ useEffect(() => {
   }, [service, stylist, date]);
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-16">
+    <main className="mx-auto max-w-3xl px-5 py-10 sm:px-6 sm:py-16">
       <p className="text-sm uppercase tracking-widest text-neutral-500">
         Appointment
       </p>
 
-      <h1 className="mt-2 text-4xl font-semibold">
+      <h1 className="mt-2 text-3xl font-semibold sm:text-4xl">
         Book your visit
       </h1>
 
       <form
         action="/api/book"
         method="post"
-        className="mt-8 space-y-5 rounded-3xl border bg-white p-7"
+        className="mt-8 space-y-5 rounded-3xl border bg-white p-5 sm:p-7"
       >
         <label className="block text-sm">
           Service
@@ -141,13 +194,75 @@ useEffect(() => {
             className="mt-2 w-full rounded-xl border p-3"
             required
           >
-            <option value="">Choose service</option>
+            <option value="">
+              Choose service
+            </option>
 
-            {services.map((x) => (
-              <option key={x.id} value={x.id}>
-                {x.name} · ₹{x.price} · {x.duration_minutes} min
-              </option>
-            ))}
+            {services.map((x) => {
+              const options = (
+                x.service_options ?? []
+              )
+                .filter(
+                  (option: any) =>
+                    option.active !== false
+                )
+                .sort(
+                  (a: any, b: any) =>
+                    (a.display_order ?? 0) -
+                    (b.display_order ?? 0)
+                );
+
+              let priceText = "";
+
+              if (options.length === 1) {
+                const option = options[0];
+
+                if (
+                  option.price_type ===
+                  "percentage"
+                ) {
+                  priceText = `${Number(
+                    option.price
+                  )}%`;
+                } else if (
+                  option.price_type === "from"
+                ) {
+                  priceText = `₹${Number(
+                    option.price
+                  ).toLocaleString(
+                    "en-IN"
+                  )} onwards`;
+                } else {
+                  priceText = `₹${Number(
+                    option.price
+                  ).toLocaleString(
+                    "en-IN"
+                  )}`;
+                }
+              } else if (options.length > 1) {
+                const lowest = Math.min(
+                  ...options.map((option: any) =>
+                    Number(option.price)
+                  )
+                );
+
+                priceText = `₹${lowest.toLocaleString(
+                  "en-IN"
+                )} onwards`;
+              }
+
+              return (
+                <option
+                  key={x.id}
+                  value={x.id}
+                >
+                  {x.name}
+                  {priceText
+                    ? ` · ${priceText}`
+                    : ""}
+                </option>
+              );
+            })}
           </select>
         </label>
 
@@ -164,10 +279,15 @@ useEffect(() => {
             className="mt-2 w-full rounded-xl border p-3"
             required
           >
-            <option value="">Choose stylist</option>
+            <option value="">
+              Choose stylist
+            </option>
 
             {stylists.map((x) => (
-              <option key={x.id} value={x.id}>
+              <option
+                key={x.id}
+                value={x.id}
+              >
                 {x.name}
               </option>
             ))}
@@ -210,7 +330,9 @@ useEffect(() => {
             <option value="">
               {loadingSlots
                 ? "Checking availability..."
-                : !service || !stylist || !date
+                : !service ||
+                    !stylist ||
+                    !date
                   ? "Choose service, stylist and date"
                   : slots.length === 0
                     ? "No available times"
@@ -218,12 +340,21 @@ useEffect(() => {
             </option>
 
             {slots.map((slot) => (
-              <option key={slot} value={slot}>
+              <option
+                key={slot}
+                value={slot}
+              >
                 {formatTime(slot)}
               </option>
             ))}
           </select>
         </label>
+
+        {message && (
+          <div className="rounded-xl bg-neutral-50 p-3 text-sm text-neutral-600">
+            {message}
+          </div>
+        )}
 
         <label className="block text-sm">
           Coupon code
@@ -231,7 +362,9 @@ useEffect(() => {
           <input
             name="coupon"
             value={coupon}
-            onChange={(e) => setCoupon(e.target.value)}
+            onChange={(e) =>
+              setCoupon(e.target.value)
+            }
             className="mt-2 w-full rounded-xl border p-3"
             placeholder="Optional"
           />
@@ -239,24 +372,16 @@ useEffect(() => {
 
         <button
           type="submit"
-          className="w-full rounded-xl bg-neutral-900 p-3 text-white"
+          disabled={
+            !service ||
+            !stylist ||
+            !date ||
+            slots.length === 0
+          }
+          className="w-full rounded-xl bg-neutral-900 p-3 text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Confirm appointment
+          Continue booking
         </button>
-
-        {message && (
-          <p className="text-sm text-red-600">
-            {message}
-          </p>
-        )}
-
-        <p className="text-xs text-neutral-500">
-          Payment is handled offline. Availability is checked again on the
-          server when you confirm.
-	  </p>
-
-    
-
       </form>
     </main>
   );
