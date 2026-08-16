@@ -2,7 +2,7 @@
 
 
 ```md
-# LUXE Salon Booking System
+# AK Hair & Beauty Salon Booking System
 
 A salon booking and management application built with Next.js, TypeScript, Tailwind CSS, Supabase, and Zod.
 
@@ -1216,7 +1216,7 @@ Admin should eventually be able to download reports as PDF.
 Example:
 
 ```text
-LUXE SALON
+AK HAIR & BEAUTY SALON
 Appointment Report
 05-12-2025 → 05-12-2025
 

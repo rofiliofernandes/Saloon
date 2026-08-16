@@ -48,7 +48,15 @@ export default function Signup() {
 
     const name = String(form.get("name") || "").trim();
     const email = String(form.get("email") || "").trim();
-    const password = String(form.get("password") || "");
+const phone = String(form.get("phone") || "")
+  .replace(/\D/g, "")
+  .trim();
+
+if (!/^[6-9]\d{9}$/.test(phone)) {
+  setMessage("Please enter a valid 10-digit Indian mobile number.");
+  setLoading(false);
+  return;
+}    const password = String(form.get("password") || "");
     const confirm = String(form.get("confirm") || "");
 
     if (password.length < 8) {
@@ -69,6 +77,7 @@ export default function Signup() {
       options: {
         data: {
           name,
+          phone,
         },
       },
     });
@@ -94,7 +103,7 @@ export default function Signup() {
 
           <div className="relative z-10">
             <p className="text-xs uppercase tracking-[0.3em] text-white/50">
-              Luxe Salon
+              AK Hair & Beauty Salon
             </p>
 
             <h2 className="mt-8 max-w-sm text-4xl font-semibold leading-tight">
@@ -131,7 +140,7 @@ export default function Signup() {
             </h1>
 
             <p className="mt-2 text-sm leading-6 text-neutral-500">
-              Join Luxe Salon to book and manage your appointments.
+              Join AK Hair & Beauty Salon to book and manage your appointments.
             </p>
 
             <form onSubmit={handleSubmit} className="mt-8 space-y-5">
@@ -170,15 +179,45 @@ export default function Signup() {
                   placeholder="you@example.com"
                   required
                 />
-              </div>
+                           <div>
+               <label
+  htmlFor="phone"
+  className="mb-2 block text-sm font-medium"
+>
+  Mobile number
+</label>
 
-              <div>
-                <label
-                  htmlFor="password"
-                  className="mb-2 block text-sm font-medium"
-                >
-                  Password
-                </label>
+<p className="mb-2 text-xs text-neutral-500">
+  We&apos;ll use this number to contact you about your appointments.
+</p>
+               <input
+  id="phone"
+  name="phone"
+  type="tel"
+  autoComplete="tel"
+  inputMode="numeric"
+  maxLength={11}
+  className="w-full rounded-xl border border-black/15 px-4 py-3.5 text-sm outline-none transition focus:border-black focus:ring-2 focus:ring-black/5"
+  placeholder="98765 43210"
+  required
+  onInput={(event) => {
+    const input = event.currentTarget;
+
+    let digits = input.value.replace(/\D/g, "");
+
+    digits = digits.slice(0, 10);
+
+    if (digits.length > 5) {
+      input.value =
+        digits.slice(0, 5) +
+        " " +
+        digits.slice(5);
+    } else {
+      input.value = digits;
+    }
+  }}
+/>
+              </div>
 
                 <div className="relative">
                   <input

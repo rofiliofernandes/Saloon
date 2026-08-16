@@ -1,4 +1,4 @@
-# Luxe Salon Booking — v2
+# AK Hair & Beauty Salon Booking — v2
 
 A deployable Next.js + Supabase + Resend salon booking application.
 

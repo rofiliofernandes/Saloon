@@ -57,7 +57,9 @@ export default async function Appointments() {
   if (!user) {
     return (
       <main className="mx-auto max-w-3xl px-6 py-20">
-        <h1 className="text-3xl font-semibold">Please sign in.</h1>
+        <h1 className="text-3xl font-semibold">
+          Please sign in.
+        </h1>
       </main>
     );
   }
@@ -86,6 +88,10 @@ export default async function Appointments() {
     .order("start_time", { ascending: true });
 
   const appointments = data ?? [];
+
+  // This is intentionally evaluated on the server when the page renders.
+  // The ESLint rule otherwise treats Date.now() as an impure render call.
+  // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
 
   const upcoming = appointments
@@ -138,7 +144,8 @@ export default async function Appointments() {
         <div className="mt-4 space-y-4">
           {upcoming.map((a: any) => {
             const start = new Date(a.start_time).getTime();
-            const canCancel = start - now >= 60 * 60 * 1000;
+            const canCancel =
+              start - now >= 60 * 60 * 1000;
 
             return (
               <div

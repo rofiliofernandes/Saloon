@@ -2,39 +2,87 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { z } from "zod";
 
-const q = z.object({
+const querySchema = z.object({
   service_id: z.string().uuid(),
+
+  service_option_id: z.string().uuid(),
+
   stylist_id: z.string().uuid(),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
-export async function GET(req: Request) {
-  const u = new URL(req.url);
+function timeToMinutes(time: string) {
+  const [hour, minute] = time
+    .slice(0, 5)
+    .split(":")
+    .map(Number);
 
-  const v = q.safeParse(
-    Object.fromEntries(u.searchParams)
+  return hour * 60 + minute;
+}
+
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+
+  const parsed = querySchema.safeParse(
+    Object.fromEntries(
+      url.searchParams
+    )
   );
 
-  if (!v.success) {
+  if (!parsed.success) {
     return NextResponse.json(
-      { error: "Invalid request" },
+      {
+        error:
+          "Invalid availability request",
+      },
       { status: 400 }
     );
   }
 
-  const s = await createClient();
-
   const {
     service_id,
+    service_option_id,
     stylist_id,
     date,
-  } = v.data;
+  } = parsed.data;
+
+  const s = await createClient();
 
   /*
-   * Make absolutely sure this stylist provides
+   * Make sure the selected option belongs to
+   * the selected service and is active.
+   */
+  const {
+    data: option,
+    error: optionError,
+  } = await s
+    .from("service_options")
+    .select(
+      "id,service_id,duration_minutes,active"
+    )
+    .eq("id", service_option_id)
+    .eq("service_id", service_id)
+    .eq("active", true)
+    .maybeSingle();
+
+  if (optionError || !option) {
+    return NextResponse.json({
+      slots: [],
+      error:
+        "Selected service option is unavailable.",
+    });
+  }
+
+  /*
+   * Make sure the stylist actually provides
    * the selected service.
    */
-  const { data: relationship } = await s
+  const {
+    data: relationship,
+  } = await s
     .from("stylist_services")
     .select("stylist_id")
     .eq("stylist_id", stylist_id)
@@ -44,54 +92,62 @@ export async function GET(req: Request) {
   if (!relationship) {
     return NextResponse.json({
       slots: [],
-      error: "This stylist does not provide this service.",
+      error:
+        "This stylist does not provide this service.",
     });
   }
 
+  /*
+   * Salon local day.
+   */
   const dayOfWeek = new Date(
     `${date}T12:00:00+05:30`
   ).getDay();
 
+  /*
+   * Load all relevant scheduling data.
+   *
+   * Multiple working-hour intervals are supported.
+   */
   const [
-    { data: service },
     { data: hours },
     { data: blocks },
     { data: closure },
     { data: appointments },
   ] = await Promise.all([
     s
-      .from("services")
-      .select("duration_minutes")
-      .eq("id", service_id)
-      .eq("active", true)
-      .is("deleted_at", null)
-      .single(),
-
-    s
       .from("working_hours")
-      .select("start_time,end_time")
+      .select(
+        "start_time,end_time"
+      )
       .eq("stylist_id", stylist_id)
       .eq("day_of_week", dayOfWeek)
-      .maybeSingle(),
+      .order("start_time"),
 
     s
       .from("blocked_periods")
-      .select("start_time,end_time")
+      .select(
+        "start_time,end_time"
+      )
       .or(
         `stylist_id.eq.${stylist_id},stylist_id.is.null`
       ),
 
     s
       .from("salon_closures")
-      .select("*")
+      .select(
+        "closure_date,close_time"
+      )
       .eq("closure_date", date)
       .maybeSingle(),
 
     s
       .from("appointments")
-      .select("start_time,end_time")
+      .select(
+        "start_time,end_time"
+      )
       .eq("stylist_id", stylist_id)
-      .eq("status", "confirmed")
+      .neq("status", "cancelled")
       .gte(
         "end_time",
         `${date}T00:00:00+05:30`
@@ -103,46 +159,47 @@ export async function GET(req: Request) {
   ]);
 
   /*
-   * No service = no availability.
-   *
-   * Salon closure = no availability.
-   *
-   * IMPORTANT:
-   * No working_hours row now means the stylist
-   * is NOT working that day.
-   *
-   * We deliberately do NOT fall back to generic
-   * 10 AM - 10 PM hours.
+   * Completely closed salon.
    */
-  if (!service || !hours || closure) {
+  if (
+    closure &&
+    closure.close_time === null
+  ) {
     return NextResponse.json({
       slots: [],
     });
   }
 
-  const startTime = hours.start_time;
-  const endTime = hours.end_time;
+  /*
+   * No working-hours row means the stylist
+   * is not working that day.
+   */
+  if (!hours?.length) {
+    return NextResponse.json({
+      slots: [],
+    });
+  }
 
-  const dur = service.duration_minutes;
-
-  const startMin =
-    Number(startTime.slice(0, 2)) * 60 +
-    Number(startTime.slice(3, 5));
-
-  const closeMin =
-    Number(endTime.slice(0, 2)) * 60 +
-    Number(endTime.slice(3, 5));
-
-  const booked = (appointments ?? []).map(
-    (a: any) => [
-      new Date(a.start_time).getTime(),
-      new Date(a.end_time).getTime(),
-    ]
-  );
+  const duration =
+    option.duration_minutes;
 
   /*
-   * Convert the requested calendar date into
-   * India-local timestamps.
+   * Convert appointments into timestamps.
+   */
+  const booked = (
+    appointments ?? []
+  ).map((appointment: any) => [
+    new Date(
+      appointment.start_time
+    ).getTime(),
+
+    new Date(
+      appointment.end_time
+    ).getTime(),
+  ]);
+
+  /*
+   * Convert blocked periods.
    */
   const dayStart = new Date(
     `${date}T00:00:00+05:30`
@@ -152,87 +209,137 @@ export async function GET(req: Request) {
     `${date}T23:59:59+05:30`
   ).getTime();
 
-  /*
-   * Only blocked periods that overlap this date
-   * matter.
-   */
-  const blocked = (blocks ?? [])
-    .map((b: any) => [
-      new Date(b.start_time).getTime(),
-      new Date(b.end_time).getTime(),
+  const blocked = (
+    blocks ?? []
+  )
+    .map((block: any) => [
+      new Date(
+        block.start_time
+      ).getTime(),
+
+      new Date(
+        block.end_time
+      ).getTime(),
     ])
     .filter(
       ([start, end]) =>
-        start < dayEnd && end > dayStart
+        start < dayEnd &&
+        end > dayStart
     );
 
   const slots: string[] = [];
 
   /*
-   * Generate slots every 30 minutes.
-   *
-   * Example:
-   * 10:00
-   * 10:30
-   * 11:00
-   * ...
-   *
-   * A service must finish by the stylist's
-   * configured closing time.
+   * Generate slots inside every working interval.
    */
-  for (
-    let m = startMin;
-    m + dur <= closeMin;
-    m += 30
-  ) {
-    const hh = String(
-      Math.floor(m / 60)
-    ).padStart(2, "0");
+  for (const hour of hours) {
+    const startMin =
+      timeToMinutes(
+        hour.start_time
+      );
 
-    const mm = String(
-      m % 60
-    ).padStart(2, "0");
-
-    const local =
-      `${date}T${hh}:${mm}:00+05:30`;
-
-    const a = new Date(local).getTime();
-    const b = a + dur * 60000;
+    let endMin =
+      timeToMinutes(
+        hour.end_time
+      );
 
     /*
-     * Never show a time that has already passed.
+     * A partial salon closure shortens the
+     * working interval.
      */
-    if (a < Date.now()) {
-      continue;
+    if (
+      closure?.close_time
+    ) {
+      endMin = Math.min(
+        endMin,
+        timeToMinutes(
+          closure.close_time
+        )
+      );
     }
 
     /*
-     * Existing appointment overlap.
+     * If the closure is before this interval,
+     * there are no slots in it.
      */
-    const appointmentConflict =
-      booked.some(
-        ([x, y]) =>
-          a < y && b > x
-      );
-
-    /*
-     * Blocked-period overlap.
-     */
-    const blockedConflict =
-      blocked.some(
-        ([x, y]) =>
-          a < y && b > x
-      );
-
     if (
-      appointmentConflict ||
-      blockedConflict
+      endMin <= startMin
     ) {
       continue;
     }
 
-    slots.push(`${hh}:${mm}`);
+    for (
+      let minute = startMin;
+      minute + duration <= endMin;
+      minute += 30
+    ) {
+      const hh = String(
+        Math.floor(minute / 60)
+      ).padStart(2, "0");
+
+      const mm = String(
+        minute % 60
+      ).padStart(2, "0");
+
+      const local =
+        `${date}T${hh}:${mm}:00+05:30`;
+
+      const start =
+        new Date(local).getTime();
+
+      const end =
+        start +
+        duration * 60 * 1000;
+
+      /*
+       * Never show a slot in the past.
+       */
+      if (start <= Date.now()) {
+        continue;
+      }
+
+      /*
+       * Existing appointment conflict.
+       */
+      const appointmentConflict =
+        booked.some(
+          ([existingStart, existingEnd]) =>
+            start < existingEnd &&
+            end > existingStart
+        );
+
+      if (appointmentConflict) {
+        continue;
+      }
+
+      /*
+       * Blocked-period conflict.
+       */
+      const blockedConflict =
+        blocked.some(
+          ([blockedStart, blockedEnd]) =>
+            start < blockedEnd &&
+            end > blockedStart
+        );
+
+      if (blockedConflict) {
+        continue;
+      }
+
+      const value =
+        `${hh}:${mm}`;
+
+      /*
+       * Avoid duplicates if two working intervals
+       * happen to touch.
+       */
+      if (!slots.includes(value)) {
+        slots.push(value);
+      }
+    }
   }
+
+  slots.sort();
 
   return NextResponse.json({
     slots,

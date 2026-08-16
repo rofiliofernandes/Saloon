@@ -7,30 +7,47 @@ import { createClient } from "@/lib/supabase/client";
 export default function ForgotPassword() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
 
     setMessage("");
+    setSent(false);
     setLoading(true);
 
     const form = new FormData(event.currentTarget);
-    const email = String(form.get("email") || "").trim();
+    const email = String(form.get("email") || "")
+      .trim()
+      .toLowerCase();
 
-    const { error } = await createClient().auth.resetPasswordForEmail(
-      email,
-      {
+    if (!email) {
+      setMessage("Please enter your email address.");
+      setLoading(false);
+      return;
+    }
+
+    const supabase = createClient();
+
+    const { error } =
+      await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
-      }
-    );
+      });
 
     if (error) {
-      setMessage(error.message);
-    } else {
       setMessage(
-        "If an account exists for that email, a password reset link has been sent."
+        "We couldn't send the reset email right now. Please try again."
       );
+      setLoading(false);
+      return;
     }
+
+    setSent(true);
+    setMessage(
+      "If an account exists for that email, a password reset link has been sent."
+    );
 
     setLoading(false);
   }
@@ -38,29 +55,30 @@ export default function ForgotPassword() {
   return (
     <main className="min-h-[calc(100vh-64px)] px-6 py-12 sm:py-20">
       <div className="mx-auto grid max-w-4xl overflow-hidden rounded-[2rem] border border-black/10 bg-white shadow-sm lg:grid-cols-[0.9fr_1.1fr]">
-        {/* Brand panel */}
         <div className="relative hidden min-h-[500px] overflow-hidden bg-neutral-950 p-10 text-white lg:flex lg:flex-col lg:justify-between">
           <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full border border-white/10" />
           <div className="absolute -bottom-32 -left-24 h-80 w-80 rounded-full border border-white/10" />
 
           <div className="relative z-10">
             <p className="text-xs uppercase tracking-[0.3em] text-white/50">
-              Luxe Salon
+              AK Hair &amp; Beauty Salon
             </p>
 
             <h2 className="mt-8 text-4xl font-semibold leading-tight">
-              We've got
+              We&apos;ve got
               <br />
               you covered.
             </h2>
 
             <p className="mt-5 max-w-sm text-sm leading-6 text-white/60">
-              Enter your email and we'll help you get back into your account.
+              Enter your email and we&apos;ll help you get back into your
+              account.
             </p>
           </div>
 
           <div className="relative z-10">
             <div className="mb-5 h-px w-16 bg-white/30" />
+
             <p className="text-sm text-white/50">
               Your account, safely in your hands.
             </p>
@@ -80,11 +98,15 @@ export default function ForgotPassword() {
             </h1>
 
             <p className="mt-3 text-sm leading-6 text-neutral-500">
-              Enter the email address associated with your Luxe Salon account.
-              We'll send you a secure link to choose a new password.
+              Enter the email address associated with your AK Hair &amp;
+              Beauty Salon account. We&apos;ll send you a secure link to
+              choose a new password.
             </p>
 
-            <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+            <form
+              onSubmit={handleSubmit}
+              className="mt-8 space-y-5"
+            >
               <div>
                 <label
                   htmlFor="email"
@@ -101,11 +123,18 @@ export default function ForgotPassword() {
                   className="w-full rounded-xl border border-black/15 px-4 py-3.5 text-sm outline-none transition focus:border-black focus:ring-2 focus:ring-black/5"
                   placeholder="you@example.com"
                   required
+                  disabled={loading}
                 />
               </div>
 
               {message && (
-                <div className="rounded-xl border border-black/10 bg-neutral-50 px-4 py-3 text-sm leading-5 text-neutral-700">
+                <div
+                  className={`rounded-xl border px-4 py-3 text-sm leading-5 ${
+                    sent
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-red-200 bg-red-50 text-red-700"
+                  }`}
+                >
                   {message}
                 </div>
               )}

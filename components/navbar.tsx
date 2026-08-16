@@ -10,6 +10,7 @@ export async function Navbar() {
   } = await supabase.auth.getUser();
 
   let admin = false;
+  let owner = false;
 
   if (user) {
     const { data: profile } = await supabase
@@ -21,6 +22,8 @@ export async function Navbar() {
     admin =
       profile?.role === "admin" ||
       profile?.role === "owner";
+
+    owner = profile?.role === "owner";
   }
 
   return (
@@ -157,7 +160,9 @@ export async function Navbar() {
               />
             </summary>
 
-            <div className="absolute right-0 top-14 w-64 overflow-hidden rounded-2xl border border-[#d8c4a0]/50 bg-[#faf8f4] p-2 shadow-xl">
+            <div className="absolute right-0 top-14 max-h-[80vh] w-72 overflow-y-auto rounded-2xl border border-[#d8c4a0]/50 bg-[#faf8f4] p-2 shadow-xl">
+
+              {/* PUBLIC NAVIGATION */}
 
               <Link
                 href="/services"
@@ -189,16 +194,99 @@ export async function Navbar() {
                 </Link>
               )}
 
+              {/* =================================================
+                  ADMIN NAVIGATION
+              ================================================= */}
+
               {admin && (
-                <Link
-                  href="/admin"
-                  className="block rounded-xl px-4 py-3 text-sm font-medium text-[#262626] hover:bg-[#bd9144]/10"
-                >
-                  Admin
-                </Link>
+                <>
+                  <div className="my-2 border-t border-[#d8c4a0]/40" />
+
+                  <p className="px-4 pb-2 pt-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-neutral-400">
+                    Management
+                  </p>
+
+                  <Link
+                    href="/admin"
+                    className="block rounded-xl px-4 py-3 text-sm font-medium text-[#262626] hover:bg-[#bd9144]/10"
+                  >
+                    Dashboard
+                  </Link>
+
+                  <Link
+                    href="/admin/appointments"
+                    className="block rounded-xl px-4 py-3 text-sm font-medium text-[#262626] hover:bg-[#bd9144]/10"
+                  >
+                    Appointments
+                  </Link>
+
+                  <Link
+                    href="/admin/services"
+                    className="block rounded-xl px-4 py-3 text-sm font-medium text-[#262626] hover:bg-[#bd9144]/10"
+                  >
+                    Services
+                  </Link>
+
+                  <Link
+                    href="/admin/stylists"
+                    className="block rounded-xl px-4 py-3 text-sm font-medium text-[#262626] hover:bg-[#bd9144]/10"
+                  >
+                    Stylists
+                  </Link>
+
+                  <Link
+                    href="/admin/availability"
+                    className="block rounded-xl px-4 py-3 text-sm font-medium text-[#262626] hover:bg-[#bd9144]/10"
+                  >
+                    Availability
+                  </Link>
+
+                  <Link
+                    href="/admin/customers"
+                    className="block rounded-xl px-4 py-3 text-sm font-medium text-[#262626] hover:bg-[#bd9144]/10"
+                  >
+                    Customers
+                  </Link>
+
+                  <Link
+                    href="/admin/coupons"
+                    className="block rounded-xl px-4 py-3 text-sm font-medium text-[#262626] hover:bg-[#bd9144]/10"
+                  >
+                    Coupons
+                  </Link>
+
+                  <Link
+                    href="/admin/stylist-cancellations"
+                    className="block rounded-xl px-4 py-3 text-sm font-medium text-[#262626] hover:bg-[#bd9144]/10"
+                  >
+                    Stylist Cancellations
+                  </Link>
+
+                  {/* OWNER ONLY */}
+
+                  {owner && (
+                    <>
+                      <Link
+                        href="/admin/reports"
+                        className="block rounded-xl px-4 py-3 text-sm font-medium text-[#262626] hover:bg-[#bd9144]/10"
+                      >
+                        Reports
+                      </Link>
+
+                      <Link
+                        href="/admin/admins"
+                        className="block rounded-xl px-4 py-3 text-sm font-medium text-[#262626] hover:bg-[#bd9144]/10"
+                      >
+                        Admin Management
+                      </Link>
+                    </>
+                  )}
+                </>
               )}
 
               <div className="my-2 border-t border-[#d8c4a0]/40" />
+
+              {/* ACCOUNT */}
 
               {user ? (
                 <form

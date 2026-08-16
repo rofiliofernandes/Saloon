@@ -33,6 +33,15 @@ function EyeIcon({ open }: { open: boolean }) {
 }
 
 export default function Login() {
+    const params =
+    typeof window !== "undefined"
+      ? new URLSearchParams(
+          window.location.search
+        )
+      : null;
+
+  const next =
+    params?.get("next") || "/";
   const [message, setMessage] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -59,8 +68,11 @@ export default function Login() {
       return;
     }
 
-    window.location.href = "/";
-  }
+window.location.href =
+  next.startsWith("/") &&
+  !next.startsWith("//")
+    ? next
+    : "/";  }
 
   return (
     <main className="min-h-[calc(100vh-64px)] px-6 py-12 sm:py-20">
@@ -72,7 +84,7 @@ export default function Login() {
 
           <div className="relative z-10">
             <p className="text-xs uppercase tracking-[0.3em] text-white/50">
-              Luxe Salon
+              AK Hair & Beauty Salon
             </p>
 
             <h2 className="mt-8 max-w-sm text-4xl font-semibold leading-tight">
@@ -92,7 +104,7 @@ export default function Login() {
           <div className="relative z-10">
             <div className="mb-5 h-px w-16 bg-white/30" />
             <p className="text-sm text-white/50">
-              Welcome back to Luxe Salon.
+              Welcome back to AK Hair & Beauty Salon.
             </p>
           </div>
 

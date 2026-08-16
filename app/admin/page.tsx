@@ -13,12 +13,59 @@ import {
 export default async function Admin() {
   const { s } = await requireAdmin();
 
-  const now = new Date();
-  const start = new Date(now);
-  const end = new Date(now);
+   const now = new Date();
 
-  start.setHours(0, 0, 0, 0);
-  end.setHours(23, 59, 59, 999);
+  const salonParts = new Intl.DateTimeFormat(
+    "en-CA",
+    {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }
+  ).formatToParts(now);
+
+  const year = Number(
+    salonParts.find(
+      (part) => part.type === "year"
+    )?.value
+  );
+
+  const month = Number(
+    salonParts.find(
+      (part) => part.type === "month"
+    )?.value
+  );
+
+  const day = Number(
+    salonParts.find(
+      (part) => part.type === "day"
+    )?.value
+  );
+
+  const start = new Date(
+    Date.UTC(
+      year,
+      month - 1,
+      day,
+      -5,
+      -30,
+      0,
+      0
+    )
+  );
+
+  const end = new Date(
+    Date.UTC(
+      year,
+      month - 1,
+      day + 1,
+      -5,
+      -30,
+      0,
+      0
+    )
+  );
 
   const [
     { count: today },
@@ -66,8 +113,7 @@ export default async function Admin() {
     [stylists ?? 0, "Active stylists", Users],
   ];
 
-  const currentDate = new Date();
-
+const currentDate = now;
   const dayName = currentDate.toLocaleDateString("en-IN", {
     weekday: "long",
   });
