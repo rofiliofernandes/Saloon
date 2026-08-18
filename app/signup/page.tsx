@@ -1,0 +1,380 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
+
+function EyeIcon({ open }: { open: boolean }) {
+  return open ? (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="2.5" />
+    </svg>
+  ) : (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <path d="m3 3 18 18" />
+      <path d="M10.6 5.2A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a18 18 0 0 1-3.1 3.9" />
+      <path d="M6.1 6.1C3.4 8.1 2 12 2 12s3.5 7 10 7c1.5 0 2.8-.3 4-.8" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+    </svg>
+  );
+}
+
+export default function Signup() {
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [showReferral, setShowReferral] = useState(false);
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    if (searchParams.get("ref")) {
+      setShowReferral(true);
+    }
+  }, [searchParams]);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    setMessage("");
+    setLoading(true);
+
+    const form = new FormData(event.currentTarget);
+
+    const name = String(form.get("name") || "").trim();
+    const email = String(form.get("email") || "").trim();
+    const phone = String(form.get("phone") || "")
+      .replace(/\D/g, "")
+      .trim();
+
+    if (!/^[6-9]\d{9}$/.test(phone)) {
+      setMessage("Please enter a valid 10-digit Indian mobile number.");
+      setLoading(false);
+      return;
+    }
+
+    const referralCode = String(form.get("referral_code") || "").trim().toUpperCase();
+    const password = String(form.get("password") || "");
+    const confirm = String(form.get("confirm") || "");
+
+
+    if (referralCode) {
+      try {
+        const referralResponse = await fetch("/api/referrals/validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: referralCode }),
+        });
+        const referralResult = await referralResponse.json();
+
+        if (!referralResponse.ok || !referralResult.valid) {
+          setMessage("That referral code is not valid. Please check it and try again.");
+          setLoading(false);
+          return;
+        }
+      } catch {
+        setMessage("We could not verify the referral code. Please try again.");
+        setLoading(false);
+        return;
+      }
+    }
+
+    if (password.length < 12) {
+      setMessage("Password must be at least 12 characters.");
+      setLoading(false);
+      return;
+    }
+
+    if (password !== confirm) {
+      setMessage("Passwords do not match.");
+      setLoading(false);
+      return;
+    }
+
+    const { error } = await createClient().auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          name,
+          phone,
+          referral_code: referralCode || null,
+        },
+      },
+    });
+
+    if (error) {
+      setMessage(error.message);
+    } else {
+      setMessage(
+        "Account created. Please check your email to verify your account."
+      );
+    }
+
+    setLoading(false);
+  }
+
+  return (
+    <main className="min-h-[calc(100vh-64px)] px-6 py-12 sm:py-20">
+      <div className="mx-auto grid max-w-5xl overflow-hidden rounded-[2rem] border border-black/10 bg-white shadow-sm lg:grid-cols-[1fr_1.05fr]">
+        {/* Brand panel */}
+        <div className="relative hidden min-h-[620px] overflow-hidden bg-neutral-950 p-10 text-white lg:flex lg:flex-col lg:justify-between">
+          <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full border border-white/10" />
+          <div className="absolute -bottom-32 -left-24 h-80 w-80 rounded-full border border-white/10" />
+
+          <div className="relative z-10">
+            <p className="text-xs uppercase tracking-[0.3em] text-white/50">
+              AK Hair & Beauty Salon
+            </p>
+
+            <h2 className="mt-8 max-w-sm text-4xl font-semibold leading-tight">
+              Make time
+              <br />
+              for yourself.
+            </h2>
+
+            <p className="mt-5 max-w-sm text-sm leading-6 text-white/60">
+              Create your account and make your next salon appointment just
+              a few clicks away.
+            </p>
+          </div>
+
+          <div className="relative z-10">
+            <div className="mb-5 h-px w-16 bg-white/30" />
+            <p className="text-sm text-white/50">
+              Simple booking. Beautiful results.
+            </p>
+          </div>
+
+          <div className="absolute left-1/2 top-1/2 h-48 w-48 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/10 animate-pulse" />
+        </div>
+
+        {/* Form */}
+        <div className="p-7 sm:p-10 lg:p-12">
+          <div className="mx-auto max-w-md">
+            <p className="text-xs uppercase tracking-[0.25em] text-neutral-400">
+              Account
+            </p>
+
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight">
+              Create account
+            </h1>
+
+            <p className="mt-2 text-sm leading-6 text-neutral-500">
+              Join AK Hair & Beauty Salon to book and manage your appointments.
+            </p>
+
+            <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+              <div>
+                <label
+                  htmlFor="name"
+                  className="mb-2 block text-sm font-medium"
+                >
+                  Name
+                </label>
+
+                <input
+                  id="name"
+                  name="name"
+                  autoComplete="name"
+                  className="w-full rounded-xl border border-black/15 px-4 py-3.5 text-sm outline-none transition focus:border-black focus:ring-2 focus:ring-black/5"
+                  placeholder="Your name"
+                  required
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="email"
+                  className="mb-2 block text-sm font-medium"
+                >
+                  Email
+                </label>
+
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  className="w-full rounded-xl border border-black/15 px-4 py-3.5 text-sm outline-none transition focus:border-black focus:ring-2 focus:ring-black/5"
+                  placeholder="you@example.com"
+                  required
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="phone"
+                  className="mb-2 block text-sm font-medium"
+                >
+                  Mobile number
+                </label>
+
+                <p className="mb-2 text-xs text-neutral-500">
+                  We&apos;ll use this number to contact you about your appointments.
+                </p>
+
+                <input
+                  id="phone"
+                  name="phone"
+                  type="tel"
+                  autoComplete="tel"
+                  inputMode="numeric"
+                  maxLength={11}
+                  className="w-full rounded-xl border border-black/15 px-4 py-3.5 text-sm outline-none transition focus:border-black focus:ring-2 focus:ring-black/5"
+                  placeholder="98765 43210"
+                  required
+                  onInput={(event) => {
+                    const input = event.currentTarget;
+                    const digits = input.value.replace(/\D/g, "").slice(0, 10);
+                    input.value =
+                      digits.length > 5
+                        ? `${digits.slice(0, 5)} ${digits.slice(5)}`
+                        : digits;
+                  }}
+                />
+              </div>
+
+
+              <div>
+                <label
+                  htmlFor="password"
+                  className="mb-2 block text-sm font-medium"
+                >
+                  Password
+                </label>
+
+                <div className="relative">
+                  <input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    minLength={12}
+                    className="w-full rounded-xl border border-black/15 px-4 py-3.5 pr-12 text-sm outline-none transition focus:border-black focus:ring-2 focus:ring-black/5"
+                    placeholder="At least 12 characters"
+                    required
+                  />
+
+                  <button
+                    type="button"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    onClick={() => setShowPassword((value) => !value)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-2 text-neutral-400 hover:bg-neutral-50 hover:text-neutral-800"
+                  >
+                    <EyeIcon open={showPassword} />
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="confirm"
+                  className="mb-2 block text-sm font-medium"
+                >
+                  Confirm password
+                </label>
+
+                <div className="relative">
+                  <input
+                    id="confirm"
+                    name="confirm"
+                    type={showConfirm ? "text" : "password"}
+                    autoComplete="new-password"
+                    minLength={12}
+                    className="w-full rounded-xl border border-black/15 px-4 py-3.5 pr-12 text-sm outline-none transition focus:border-black focus:ring-2 focus:ring-black/5"
+                    placeholder="Enter password again"
+                    required
+                  />
+
+                  <button
+                    type="button"
+                    aria-label={
+                      showConfirm
+                        ? "Hide password"
+                        : "Show password"
+                    }
+                    onClick={() => setShowConfirm((value) => !value)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-2 text-neutral-400 hover:bg-neutral-50 hover:text-neutral-800"
+                  >
+                    <EyeIcon open={showConfirm} />
+                  </button>
+                </div>
+              </div>
+
+
+
+              <div className="rounded-xl border border-black/10 bg-neutral-50/60 px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => setShowReferral((value) => !value)}
+                  className="flex w-full items-center justify-between text-left text-sm font-medium"
+                >
+                  <span>Do you have a referral?</span>
+                  <span className="text-[#6d4fd8]">
+                    {showReferral ? "Hide" : "Add referral"}
+                  </span>
+                </button>
+
+                {showReferral && (
+                  <div className="mt-3">
+                    <input
+                      id="referral_code"
+                      name="referral_code"
+                      defaultValue={searchParams.get("ref") || ""}
+                      className="w-full rounded-xl border border-black/15 bg-white px-4 py-3.5 text-sm uppercase outline-none transition focus:border-black focus:ring-2 focus:ring-black/5"
+                      placeholder="Enter referral code"
+                      maxLength={32}
+                      autoComplete="off"
+                    />
+                    <p className="mt-2 text-xs leading-5 text-neutral-500">
+                      If an existing customer referred you, enter their code here.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {message && (
+                <div className="rounded-xl border border-black/10 bg-neutral-50 px-4 py-3 text-sm text-neutral-700">
+                  {message}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full rounded-xl bg-neutral-900 px-4 py-3.5 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? "Creating account..." : "Create account"}
+              </button>
+            </form>
+
+            <p className="mt-7 text-center text-sm text-neutral-500">
+              Already registered?{" "}
+              <Link
+                href="/login"
+                className="font-medium text-neutral-900 underline underline-offset-4"
+              >
+                Sign in
+              </Link>
+            </p>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}

@@ -1,0 +1,36 @@
+{
+  "name": "luxe-salon-booking",
+  "private": true,
+  "version": "2.0.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "prebuild": "node scripts/clean-build-cache.mjs"
+  },
+  "dependencies": {
+    "@react-email/components": "1.0.12",
+    "@supabase/ssr": "0.12.4",
+    "@supabase/supabase-js": "2.112.2",
+    "@tailwindcss/postcss": "4.3.3",
+    "date-fns": "4.4.0",
+    "jspdf": "4.2.1",
+    "lucide-react": "1.31.0",
+    "next": "16.3.0",
+    "postcss": "8.5.26",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "resend": "6.19.0",
+    "tailwindcss": "4.3.3",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.3.0",
+    "typescript": "6.0.3"
+  }
+}
